@@ -20,14 +20,9 @@ Whether you’re chasing down network anomalies or just curious like a kitten, T
    cd tailtrace
    ```
 
-3. Install dependencies:  
-   ```bash
-   pip install -r requirements.txt
-   ```
-
 4. Run TailTrace:  
    ```bash
-   python main.py --capture
+   python main.py -с
    ```
 
 ## 🛠️ Usage
@@ -35,18 +30,22 @@ Whether you’re chasing down network anomalies or just curious like a kitten, T
 ### Capture Traffic
 To start capturing network traffic, simply run:  
 ```bash
-python main.py --capture
+python main.py -c
 ```
 
 You can also specify a network interface:  
 ```bash
-python main.py --capture --interface eth0
+Available network interfaces:
+1. eth0
+2. wlan0
+Select an interface by number: 1
+
 ```
 
 ### Analyze a Target
 Analyze traffic for a specific domain:  
 ```bash
-python main.py --target example.com
+python main.py -t example.com
 ```
 
 ## 🐱 Cat-Inspired Tips
