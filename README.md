@@ -12,12 +12,12 @@ Whether you’re chasing down network anomalies or just curious like a kitten, T
 
 1. Clone the repository:  
    ```bash
-   git clone https://github.com/your-username/tailtrace.git
+   git clone https://github.com/papanya02/TailTrace.git
    ```
 
 2. Navigate to the project directory:  
    ```bash
-   cd tailtrace
+   cd TailTrace
    ```
 
 4. Run TailTrace:  
