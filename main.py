@@ -1,4 +1,4 @@
-import argparse
+mport argparse
 import socket
 import subprocess
 import sys
@@ -18,32 +18,35 @@ except ImportError:
     logging.info("Scapy is not installed. Installing...")
     install_package("scapy")
     from scapy.all import sniff
-
+    
 def print_welcome_message():
     welcome_message = """
-   
-       █████████████████████████████████████████████████████████████████████
-      |         ,     ,                                            ,  ,     |
-      |        /(     )\\         Welcome to TailTrace!            (\\ _ )_  |
-      |       (  \\___/  )       The Purr-fect Network Tool!       ( _'_)    |
-      |       (   >  <   )                                       (        ) |
-      |        \\_________/                                        '-------'  |
-      |         /       \\                                                    |
-      |        (         )           Cat powered analysis engine             |
-      |         \\_______/                                                    |
+     █████████████████████████████████████████████████████████████████████                    
+      
+      |                         TailTrace                               |
+      |                         /\_____/\                               |
+      |                        /  o   o  \  < Meow! Network sniffed!    |
+      |                       ( ==  ^  == )                             |
+      |                        )         (                              |
+      |                       (           )                             |
+      |                      ( (  )   (  ) )                            |
+      |                     (__(__)___(__)__)                           |
+      |                                                                 |
       █████████████████████████████████████████████████████████████████████
+
+      --=[ TailTrace v1.0.0 ]=--
+
+      TailTrace tip: Never underestimate a cat's curiosity or a network packet.
     
     **************************************************************
     * TailTrace v1.0.0                                            *
     * License: MIT                                               *
-    * Author: Andriy Tyshkevych                                  *
+    * Author: Andrii Tyshkevych                                  *
     * Description: A network traffic analyzer and capture tool. *
     **************************************************************
     """
 
     print(welcome_message)
-
-print_welcome_message()
 
 
 
