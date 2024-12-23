@@ -92,26 +92,23 @@ def packet_callback(packet, csv_file=None):
 
     detected_protocol = detect_protocol(packet)
 
-    packet_info = {
-        'Time': datetime.now().strftime('%H:%M:%S.%f')[:-3],
-        'Source': ip_src,
-        'Destination': ip_dst,
-        'Protocol': detected_protocol,
-        'Length': len(packet),
-        'Info': f"Src Port: {src_port} Dst Port: {dst_port}"
-    }
-
-    print(f"\n{'-'*50}")
-    print(f"Time          : {colored(packet_info['Time'], 'cyan')}")
-    print(f"Source        : {colored(packet_info['Source'], 'green')}")
-    print(f"Destination   : {colored(packet_info['Destination'], 'red')}")
-    print(f"Protocol      : {colored(packet_info['Protocol'], 'yellow')}")
-    print(f"Length        : {packet_info['Length']} bytes")
-    print(f"Info          : {packet_info['Info']}")
-    print(f"{'-'*50}")
+    print(f"{datetime.now().strftime('%H:%M:%S.%f')[:-3]} | "
+          f"{colored(ip_src, 'green')}:{src_port} -> "
+          f"{colored(ip_dst, 'red')}:{dst_port} | "
+          f"Proto: {colored(detected_protocol, 'yellow')} | "
+          f"Len: {len(packet)} bytes")
 
     if csv_file:
+        packet_info = {
+            'Time': datetime.now().strftime('%H:%M:%S.%f')[:-3],
+            'Source': ip_src,
+            'Destination': ip_dst,
+            'Protocol': detected_protocol,
+            'Length': len(packet),
+            'Info': f"Src Port: {src_port} Dst Port: {dst_port}"
+        }
         log_traffic_to_csv(csv_file, packet_info)
+
 
 def log_traffic_to_csv(csv_file, packet_info):
     """Log captured packet data to a CSV file."""
@@ -229,3 +226,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
