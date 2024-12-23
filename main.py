@@ -3,18 +3,22 @@ import argparse
 import subprocess
 import sys
 import logging
-from scapy.all import sniff, get_if_list, get_if_hwaddr, get_if_addr, IP, TCP, UDP, Ether
+from scapy.all import sniff, get_if_list, get_if_hwaddr, get_if_addr, IP, TCP, UDP, Ether, ARP, DNS, HTTPRequest
 import time
 import matplotlib.pyplot as plt
 
-
 IP_REQUEST_THRESHOLD = 100
 PORT_REQUEST_THRESHOLD = 50
+ARP_SPOOF_THRESHOLD = 5
+DNS_REQUEST_THRESHOLD = 50
+HTTP_REQUEST_THRESHOLD = 20
 
 ip_activity = defaultdict(int)
 port_activity = defaultdict(int)
+arp_activity = defaultdict(int)
+dns_activity = defaultdict(int)
+http_activity = defaultdict(int)
 
-# Графік
 packet_counts = []
 timestamps = []
 
@@ -54,11 +58,11 @@ def print_welcome_message():
     print(welcome_message)
 
 def detect_anomalies(packet):
-    """Checking the package for anomalies."""
+    """Check the packet for anomalies."""
     if packet.haslayer(IP):
         src_ip = packet[IP].src
-        
         ip_activity[src_ip] += 1
+
         if ip_activity[src_ip] > IP_REQUEST_THRESHOLD:
             print(f"[ALERT] Abnormal activity from IP: {src_ip} (requests: {ip_activity[src_ip]})")
 
@@ -68,12 +72,33 @@ def detect_anomalies(packet):
             if port_activity[port] > PORT_REQUEST_THRESHOLD:
                 print(f"[ALERT] Abnormal activity on the port: {port} (requests: {port_activity[port]})")
 
+    if packet.haslayer(ARP):
+        arp_src = packet[ARP].psrc
+        arp_activity[arp_src] += 1
+        if arp_activity[arp_src] > ARP_SPOOF_THRESHOLD:
+            print(f"[ALERT] Potential ARP spoofing detected from IP: {arp_src}")
+
+    if packet.haslayer(DNS):
+        dns_query = packet[DNS].qd.qname.decode('utf-8') if packet[DNS].qd else "Unknown"
+        dns_activity[dns_query] += 1
+        if dns_activity[dns_query] > DNS_REQUEST_THRESHOLD:
+            print(f"[ALERT] High DNS activity for domain: {dns_query} (requests: {dns_activity[dns_query]})")
+
+    if packet.haslayer(HTTPRequest):
+        http_host = packet[HTTPRequest].Host.decode('utf-8') if packet[HTTPRequest].Host else "Unknown"
+        http_activity[http_host] += 1
+        if http_activity[http_host] > HTTP_REQUEST_THRESHOLD:
+            print(f"[ALERT] High HTTP activity for host: {http_host} (requests: {http_activity[http_host]})")
+
 def is_own_packet(packet, own_mac):
     """Check if the packet is from our own interface."""
     return packet.haslayer(Ether) and packet[Ether].src.lower() == own_mac.lower()
 
 def packet_callback(packet, analyze=False, own_mac=None):
     """Callback function to process each captured packet."""
+    if own_mac and is_own_packet(packet, own_mac):
+        return
+
     if packet.haslayer(IP):
         ip_src = packet[IP].src
         ip_dst = packet[IP].dst
@@ -89,9 +114,6 @@ def packet_callback(packet, analyze=False, own_mac=None):
     else:
         src_port = dst_port = "N/A"
 
-    if own_mac and is_own_packet(packet, own_mac):
-        return
-
     packet_counts.append(1)
     timestamps.append(time.time())
 
@@ -101,6 +123,7 @@ def packet_callback(packet, analyze=False, own_mac=None):
     if analyze:
         detect_anomalies(packet)
         plot_traffic()
+
 
 def capture_traffic(analyze=False, only_external=False):
     """Capture network traffic from a specified interface."""
@@ -127,7 +150,7 @@ def capture_traffic(analyze=False, only_external=False):
         if selected_idx < 0 or selected_idx >= len(interface_names):
             raise ValueError("Invalid selection.")
         interface, iface_name = interface_names[selected_idx + 1]
-        own_mac = get_if_hwaddr(interface)  
+        own_mac = get_if_hwaddr(interface)
     except (ValueError, IndexError):
         print("Invalid selection. Exiting.")
         sys.exit(1)
@@ -136,16 +159,15 @@ def capture_traffic(analyze=False, only_external=False):
 
     try:
         if only_external:
-
             sniff(iface=interface, prn=lambda pkt: packet_callback(pkt, analyze=False, own_mac=own_mac), store=0)
         else:
-            sniff(iface=interface, prn=lambda pkt: packet_callback(pkt, analyze=False), store=0)
+            sniff(iface=interface, prn=lambda pkt: packet_callback(pkt, analyze=analyze), store=0)
     except KeyboardInterrupt:
         print("\nCapture stopped by user.")
-
+        
 def plot_traffic():
     """Plot live traffic on a graph."""
-    plt.clf()  
+    plt.clf()
     plt.plot(timestamps, packet_counts, label="Packets per second", color='blue')
     plt.xlabel("Time")
     plt.ylabel("Packet count")
@@ -153,20 +175,8 @@ def plot_traffic():
     plt.draw()
     plt.pause(0.1)
 
-def analyze_without_own_packets(interface):
-    """Analyze all packets except from our own interface."""
-    own_mac = get_if_hwaddr(interface)
-    
-    print(f"Analyzing traffic excluding our own packets on interface {interface}...")
-
-    try:
-        sniff(iface=interface, prn=lambda pkt: packet_callback(pkt, analyze=True, own_mac=own_mac), store=0)
-    except KeyboardInterrupt:
-        print("\nCapture stopped by user.")
-
 def main():
-    install_requirements()  
-
+    install_requirements()
     print_welcome_message()
 
     parser = argparse.ArgumentParser(description="TailTrace - Network Traffic Analyzer.")
@@ -175,40 +185,12 @@ def main():
     parser.add_argument("-o", "--only-external", help="Analyze or capture traffic excluding own packets.", action="store_true")
     args = parser.parse_args()
 
-    if args.capture and args.only_external:
-        capture_traffic(analyze=False, only_external=True)
-    elif args.capture:
+    if args.capture:
         capture_traffic(analyze=False)
-    elif args.analyze and args.only_external:
-        capture_traffic(analyze=True, only_external=True)
     elif args.analyze:
         capture_traffic(analyze=True)
-    elif args.only_external:
-        interfaces = get_if_list()
-        if not interfaces:
-            print("No network interfaces found.")
-            sys.exit(1)
-
-        print("Available network interfaces:")
-        for idx, iface in enumerate(interfaces, 1):
-            try:
-                ip_addr = get_if_addr(iface)
-                if ip_addr == "0.0.0.0":
-                    ip_addr = "No IP assigned"
-                print(f"{idx}. {iface} ({ip_addr})")
-            except Exception as e:
-                logging.warning(f"Could not get IP for interface {iface}: {e}")
-        
-        selected_idx = int(input("Select an interface by number: ")) - 1
-        if selected_idx < 0 or selected_idx >= len(interfaces):
-            print("Invalid selection. Exiting.")
-            sys.exit(1)
-        
-        interface = interfaces[selected_idx]
-        analyze_without_own_packets(interface)
     else:
         logging.error("Please choose either capture (-c) or analyze (-a) mode.")
 
 if __name__ == "__main__":
     main()
-
