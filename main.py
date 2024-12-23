@@ -92,7 +92,6 @@ def packet_callback(packet, csv_file=None):
 
     detected_protocol = detect_protocol(packet)
 
-    # Wireshark compatible CSV format
     packet_info = {
         'Time': datetime.now().strftime('%H:%M:%S.%f')[:-3],
         'Source': ip_src,
@@ -102,7 +101,6 @@ def packet_callback(packet, csv_file=None):
         'Info': f"Src Port: {src_port} Dst Port: {dst_port}"
     }
 
-    # Horizontal output like Wireshark (without No. column)
     print(f"\n{'-'*50}")
     print(f"Time          : {colored(packet_info['Time'], 'cyan')}")
     print(f"Source        : {colored(packet_info['Source'], 'green')}")
@@ -121,7 +119,7 @@ def log_traffic_to_csv(csv_file, packet_info):
     with open(csv_file, mode='a', newline='') as file:
         writer = csv.DictWriter(file, fieldnames=['Time', 'Source', 'Destination', 'Protocol', 'Length', 'Info'])
         if not file_exists:
-            writer.writeheader()  # Write header only once
+            writer.writeheader()  
         writer.writerow(packet_info)
 
 def capture_traffic(csv_file=None):
@@ -174,12 +172,10 @@ def analyze_csv(csv_file):
 
     print("\nPerforming traffic analysis...")
 
-    # Analyze protocols
     protocol_counts = df['Protocol'].value_counts()
     print("\nProtocol Distribution:")
     print(protocol_counts)
 
-    # Detect anomalies
     print("\nDetecting anomalies...")
     if 'Length' in df.columns:
         large_packets = df[df['Length'] > 1000]
@@ -187,7 +183,6 @@ def analyze_csv(csv_file):
             print(f"\nLarge packets detected:")
             print(large_packets[['Time', 'Source', 'Destination', 'Length']])
 
-    # Geolocation analysis
     try:
         reader = geoip2.database.Reader('GeoLite2-Country.mmdb')
         countries = []
