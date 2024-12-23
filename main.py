@@ -1,42 +1,35 @@
-from collections import defaultdict
 import argparse
 import subprocess
 import sys
 import logging
-from scapy.all import sniff, get_if_list, get_if_hwaddr, get_if_addr, IP, TCP, UDP, Ether, ARP, DNS
-from scapy.layers.http import HTTPRequest
-import time
-import matplotlib.pyplot as plt
+import os
+import csv
+from scapy.all import sniff, get_if_list, get_if_addr, IP, TCP, UDP, Raw
+from datetime import datetime
+from termcolor import colored
+import geoip2.database
+import pandas as pd
 
-IP_REQUEST_THRESHOLD = 100
-PORT_REQUEST_THRESHOLD = 50
-ARP_SPOOF_THRESHOLD = 5
-DNS_REQUEST_THRESHOLD = 50
-HTTP_REQUEST_THRESHOLD = 20
-
-ip_activity = defaultdict(int)
-port_activity = defaultdict(int)
-arp_activity = defaultdict(int)
-dns_activity = defaultdict(int)
-http_activity = defaultdict(int)
-
-packet_counts = []
-timestamps = []
-
-def install_requirements():
-    """Ensure all required packages are installed."""
+def install_package(package):
     try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package])
     except subprocess.CalledProcessError:
-        logging.error("Failed to install required packages.")
+        logging.error(f"Failed to install package {package}")
         sys.exit(1)
+
+try:
+    from scapy.all import sniff
+except ImportError:
+    logging.info("Scapy is not installed. Installing...")
+    install_package("scapy")
+    from scapy.all import sniff
 
 def print_welcome_message():
     welcome_message = """
-    █████████████████████████████████████████████████████████████████████                    
+     █████████████████████████████████████████████████████████████████████                    
       
       |                         TailTrace                               |
-      |                         /\_____/\                               |
+      |                         /\_____\/\                               |
       |                        /  o   o  \  < Meow! Network sniffed!    |
       |                       ( ==  ^  == )                             |
       |                        )         (                              |
@@ -49,6 +42,7 @@ def print_welcome_message():
       --=[ TailTrace v1.0.0 ]=--
 
       TailTrace tip: Never underestimate a cat's curiosity or a network packet.
+    
     **************************************************************
     * TailTrace v1.0.0                                            *
     * License: MIT                                               *
@@ -56,54 +50,31 @@ def print_welcome_message():
     * Description: A network traffic analyzer and capture tool. *
     **************************************************************
     """
+
     print(welcome_message)
 
+def detect_protocol(packet):
+    """Detect the protocol type and identify modern protocols."""
+    if packet.haslayer(UDP):
+        if packet[UDP].dport == 443 or packet[UDP].sport == 443:
+            return "QUIC (HTTP/3)"
+    if packet.haslayer(TCP):
+        if packet[TCP].dport == 1883 or packet[TCP].sport == 1883:
+            return "MQTT"
+    if packet.haslayer(UDP):
+        if packet[UDP].dport == 5683 or packet[UDP].sport == 5683:
+            return "CoAP"
+    if packet.haslayer(UDP):
+        if 2152 <= packet[UDP].dport <= 2172 or 2152 <= packet[UDP].sport <= 2172:
+            return "5G"
+    if packet.haslayer(TCP):
+        return "TCP"
+    if packet.haslayer(UDP):
+        return "UDP"
+    return "Unknown"
 
-def detect_anomalies(packet):
-    """Check the packet for anomalies."""
-    if packet.haslayer(IP):
-        src_ip = packet[IP].src
-        ip_activity[src_ip] += 1
-
-        if ip_activity[src_ip] > IP_REQUEST_THRESHOLD:
-            print(f"[ALERT] Abnormal activity from IP: {src_ip} (requests: {ip_activity[src_ip]})")
-
-        if packet.haslayer(TCP) or packet.haslayer(UDP):
-            port = packet[TCP].dport if packet.haslayer(TCP) else packet[UDP].dport
-            port_activity[port] += 1
-            if port_activity[port] > PORT_REQUEST_THRESHOLD:
-                print(f"[ALERT] Abnormal activity on the port: {port} (requests: {port_activity[port]})")
-
-    if packet.haslayer(ARP):
-        arp_src = packet[ARP].psrc
-        arp_activity[arp_src] += 1
-        if arp_activity[arp_src] > ARP_SPOOF_THRESHOLD:
-            print(f"[ALERT] Potential ARP spoofing detected from IP: {arp_src}")
-
-    if packet.haslayer(DNS):
-        dns_query = packet[DNS].qd.qname.decode('utf-8') if packet[DNS].qd else "Unknown"
-        dns_activity[dns_query] += 1
-        if dns_activity[dns_query] > DNS_REQUEST_THRESHOLD:
-            print(f"[ALERT] High DNS activity for domain: {dns_query} (requests: {dns_activity[dns_query]})")
-
-    if packet.haslayer(HTTPRequest):
-        try:
-            http_host = packet[HTTPRequest].Host.decode('utf-8') if packet[HTTPRequest].Host else "Unknown"
-            http_activity[http_host] += 1
-            if http_activity[http_host] > HTTP_REQUEST_THRESHOLD:
-                print(f"[ALERT] High HTTP activity for host: {http_host} (requests: {http_activity[http_host]})")
-        except AttributeError:
-            pass
-        
-def is_own_packet(packet, own_mac):
-    """Check if the packet is from our own interface."""
-    return packet.haslayer(Ether) and packet[Ether].src.lower() == own_mac.lower()
-
-def packet_callback(packet, analyze=False, own_mac=None):
+def packet_callback(packet, csv_file=None):
     """Callback function to process each captured packet."""
-    if own_mac and is_own_packet(packet, own_mac):
-        return
-
     if packet.haslayer(IP):
         ip_src = packet[IP].src
         ip_dst = packet[IP].dst
@@ -119,18 +90,41 @@ def packet_callback(packet, analyze=False, own_mac=None):
     else:
         src_port = dst_port = "N/A"
 
-    packet_counts.append(len(packet))
-    timestamps.append(time.time())
+    detected_protocol = detect_protocol(packet)
 
-    packet_info = f"Source: {ip_src} | Destination: {ip_dst} | Src Port: {src_port} | Dst Port: {dst_port}"
-    print(packet_info)
+    # Wireshark compatible CSV format
+    packet_info = {
+        'Time': datetime.now().strftime('%H:%M:%S.%f')[:-3],
+        'Source': ip_src,
+        'Destination': ip_dst,
+        'Protocol': detected_protocol,
+        'Length': len(packet),
+        'Info': f"Src Port: {src_port} Dst Port: {dst_port}"
+    }
 
-    if analyze:
-        detect_anomalies(packet)
-        plot_traffic()
+    # Horizontal output like Wireshark (without No. column)
+    print(f"\n{'-'*50}")
+    print(f"Time          : {colored(packet_info['Time'], 'cyan')}")
+    print(f"Source        : {colored(packet_info['Source'], 'green')}")
+    print(f"Destination   : {colored(packet_info['Destination'], 'red')}")
+    print(f"Protocol      : {colored(packet_info['Protocol'], 'yellow')}")
+    print(f"Length        : {packet_info['Length']} bytes")
+    print(f"Info          : {packet_info['Info']}")
+    print(f"{'-'*50}")
 
+    if csv_file:
+        log_traffic_to_csv(csv_file, packet_info)
 
-def capture_traffic(analyze=False, only_external=False):
+def log_traffic_to_csv(csv_file, packet_info):
+    """Log captured packet data to a CSV file."""
+    file_exists = os.path.isfile(csv_file)
+    with open(csv_file, mode='a', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=['Time', 'Source', 'Destination', 'Protocol', 'Length', 'Info'])
+        if not file_exists:
+            writer.writeheader()  # Write header only once
+        writer.writerow(packet_info)
+
+def capture_traffic(csv_file=None):
     """Capture network traffic from a specified interface."""
     interfaces = get_if_list()
     if not interfaces:
@@ -155,49 +149,88 @@ def capture_traffic(analyze=False, only_external=False):
         if selected_idx < 0 or selected_idx >= len(interface_names):
             raise ValueError("Invalid selection.")
         interface, iface_name = interface_names[selected_idx + 1]
-        own_mac = get_if_hwaddr(interface)
     except (ValueError, IndexError):
         print("Invalid selection. Exiting.")
         sys.exit(1)
 
-    print(f"Capturing traffic on interface {interface} ({iface_name})...")
+    print(f"Capturing traffic on interface {iface} ({iface_name})...")
 
     try:
-        if only_external:
-            sniff(iface=interface, prn=lambda pkt: packet_callback(pkt, analyze=False, own_mac=own_mac), store=0)
-        else:
-            sniff(iface=interface, prn=lambda pkt: packet_callback(pkt, analyze=analyze), store=0)
+        sniff(iface=interface, prn=lambda packet: packet_callback(packet, csv_file), store=0)
     except KeyboardInterrupt:
         print("\nCapture stopped by user.")
-        
-def plot_traffic():
-    """Plot live traffic on a graph."""
-    plt.clf()
-    plt.plot(timestamps, packet_counts, label="Packets size over time", color='green', marker='o')
-    plt.xlabel("Time (s)")
-    plt.ylabel("Packet size (bytes)")
-    plt.title("Network Traffic (Packet size over time)")
-    plt.legend()
-    plt.grid(True)
-    plt.draw()
-    plt.pause(0.1)
+
+def analyze_csv(csv_file):
+    """Analyze network traffic from a CSV file."""
+    if not os.path.isfile(csv_file):
+        print(f"Error: File {csv_file} does not exist.")
+        return
+
+    try:
+        df = pd.read_csv(csv_file)
+    except Exception as e:
+        print(f"Error reading CSV file: {e}")
+        return
+
+    print("\nPerforming traffic analysis...")
+
+    # Analyze protocols
+    protocol_counts = df['Protocol'].value_counts()
+    print("\nProtocol Distribution:")
+    print(protocol_counts)
+
+    # Detect anomalies
+    print("\nDetecting anomalies...")
+    if 'Length' in df.columns:
+        large_packets = df[df['Length'] > 1000]
+        if not large_packets.empty:
+            print(f"\nLarge packets detected:")
+            print(large_packets[['Time', 'Source', 'Destination', 'Length']])
+
+    # Geolocation analysis
+    try:
+        reader = geoip2.database.Reader('GeoLite2-Country.mmdb')
+        countries = []
+        for ip in df['Source']:
+            try:
+                response = reader.country(ip)
+                countries.append(response.country.name)
+            except:
+                countries.append("Unknown")
+        df['Source Country'] = countries
+        print("\nTraffic by Source Country:")
+        print(df['Source Country'].value_counts())
+    except Exception as e:
+        print(f"Error in geolocation analysis: {e}")
+        3
 
 def main():
-    install_requirements()
     print_welcome_message()
 
-    parser = argparse.ArgumentParser(description="TailTrace - Network Traffic Analyzer.")
-    parser.add_argument("-c", "--capture", help="Capture network traffic without analysis.", action="store_true")
-    parser.add_argument("-a", "--analyze", help="Capture and analyze network traffic for anomalies.", action="store_true")
-    parser.add_argument("-o", "--only-external", help="Analyze or capture traffic excluding own packets.", action="store_true")
-    args = parser.parse_args()
+    while True:
+        print("\nSelect an option:")
+        print("1) Monitor traffic in console")
+        print("2) Monitor traffic in console and log to CSV")
+        print("3) Analyze traffic from a CSV file")
+        print("4) Exit")
 
-    if args.capture:
-        capture_traffic(analyze=False)
-    elif args.analyze:
-        capture_traffic(analyze=True)
-    else:
-        logging.error("Please choose either capture (-c) or analyze (-a) mode.")
+        choice = input("Enter your choice: ")
+
+        if choice == "1":
+            capture_traffic()
+        elif choice == "2":
+            csv_file = input("Enter the CSV file path to log traffic: ")
+            if not csv_file.endswith('.csv'):
+                csv_file += '.csv'
+            capture_traffic(csv_file)
+        elif choice == "3":
+            csv_file = input("Enter the path of the CSV file to analyze: ")
+            analyze_csv(csv_file)
+        elif choice == "4":
+            print("Exiting TailTrace. Goodbye!")
+            break
+        else:
+            print("Invalid choice. Please try again.")
 
 if __name__ == "__main__":
     main()
