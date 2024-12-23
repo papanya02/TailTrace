@@ -3,7 +3,8 @@ import argparse
 import subprocess
 import sys
 import logging
-from scapy.all import sniff, get_if_list, get_if_hwaddr, get_if_addr, IP, TCP, UDP, Ether, ARP, DNS, HTTPRequest
+from scapy.all import sniff, get_if_list, get_if_hwaddr, get_if_addr, IP, TCP, UDP, Ether, ARP, DNS
+from scapy.layers.http import HTTPRequest
 import time
 import matplotlib.pyplot as plt
 
@@ -57,6 +58,7 @@ def print_welcome_message():
     """
     print(welcome_message)
 
+
 def detect_anomalies(packet):
     """Check the packet for anomalies."""
     if packet.haslayer(IP):
@@ -85,11 +87,14 @@ def detect_anomalies(packet):
             print(f"[ALERT] High DNS activity for domain: {dns_query} (requests: {dns_activity[dns_query]})")
 
     if packet.haslayer(HTTPRequest):
-        http_host = packet[HTTPRequest].Host.decode('utf-8') if packet[HTTPRequest].Host else "Unknown"
-        http_activity[http_host] += 1
-        if http_activity[http_host] > HTTP_REQUEST_THRESHOLD:
-            print(f"[ALERT] High HTTP activity for host: {http_host} (requests: {http_activity[http_host]})")
-
+        try:
+            http_host = packet[HTTPRequest].Host.decode('utf-8') if packet[HTTPRequest].Host else "Unknown"
+            http_activity[http_host] += 1
+            if http_activity[http_host] > HTTP_REQUEST_THRESHOLD:
+                print(f"[ALERT] High HTTP activity for host: {http_host} (requests: {http_activity[http_host]})")
+        except AttributeError:
+            pass
+        
 def is_own_packet(packet, own_mac):
     """Check if the packet is from our own interface."""
     return packet.haslayer(Ether) and packet[Ether].src.lower() == own_mac.lower()
@@ -114,7 +119,7 @@ def packet_callback(packet, analyze=False, own_mac=None):
     else:
         src_port = dst_port = "N/A"
 
-    packet_counts.append(1)
+    packet_counts.append(len(packet))
     timestamps.append(time.time())
 
     packet_info = f"Source: {ip_src} | Destination: {ip_dst} | Src Port: {src_port} | Dst Port: {dst_port}"
@@ -168,10 +173,12 @@ def capture_traffic(analyze=False, only_external=False):
 def plot_traffic():
     """Plot live traffic on a graph."""
     plt.clf()
-    plt.plot(timestamps, packet_counts, label="Packets per second", color='blue')
-    plt.xlabel("Time")
-    plt.ylabel("Packet count")
-    plt.title("Network Traffic (Packets per second)")
+    plt.plot(timestamps, packet_counts, label="Packets size over time", color='green', marker='o')
+    plt.xlabel("Time (s)")
+    plt.ylabel("Packet size (bytes)")
+    plt.title("Network Traffic (Packet size over time)")
+    plt.legend()
+    plt.grid(True)
     plt.draw()
     plt.pause(0.1)
 
