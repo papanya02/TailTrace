@@ -22,7 +22,7 @@ Whether you’re chasing down network anomalies or just curious like a kitten, T
 
 4. Run TailTrace:  
    ```bash
-   python main.py -с
+   python main.py 
    ```
 
 ## 🛠️ Usage
@@ -30,7 +30,12 @@ Whether you’re chasing down network anomalies or just curious like a kitten, T
 ### Capture Traffic
 To start capturing network traffic, simply run:  
 ```bash
-python main.py -c
+Select an option:
+1) Monitor traffic in console
+2) Monitor traffic in console and log to CSV
+3) Analyze traffic from a CSV file
+4) Exit
+Enter your choice:
 ```
 
 You can also specify a network interface:  
@@ -38,15 +43,10 @@ You can also specify a network interface:
 Available network interfaces:
 1. eth0
 2. wlan0
-Select an interface by number: 1
+Select an interface by number: 
 
 ```
 
-### Analyze a Target
-Analyze traffic for a specific domain:  
-```bash
-python main.py -t example.com
-```
 
 ## 🐱 Cat-Inspired Tips
 > "Cats and packets are alike: they always find a way into the most unexpected places."  
@@ -60,7 +60,7 @@ This project is licensed under the MIT License.
 
 ---
 
-Built with curiosity by [Andrii Tyshkevych]. 🐾  
+Built with curiosity by [Andrii Tyshkevych]. contact - andrewtillbert@gmail.com  🐾  
 May your packets always find their way home! ✨
 
 
