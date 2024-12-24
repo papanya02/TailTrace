@@ -188,7 +188,7 @@ def analyze_geolocation(df):
 def analyze_signatures(df):
     """Perform basic signature-based analysis to detect suspicious traffic."""
     print("\nAnalyzing signatures for suspicious traffic:")
-    suspicious_ports = [4444, 5555, 6666]  # Example of suspicious ports
+    suspicious_ports = [4444, 5555, 6666]  
     suspicious_traffic = df[df['Info'].str.contains('|'.join(map(str, suspicious_ports)), na=False)]
     if not suspicious_traffic.empty:
         print("Suspicious traffic detected:")
@@ -199,8 +199,8 @@ def analyze_signatures(df):
 def detect_dos_attacks(df):
     """Виявлення DoS/DDoS-атак за кількістю запитів з одного джерела."""
     print("\nDetecting DoS/DDoS attacks:")
-    dos_threshold = 1000  # Кількість запитів
-    time_window = 10  # У секундах
+    dos_threshold = 1000  
+    time_window = 10  
     df['Time'] = pd.to_datetime(df['Time'], format='%H:%M:%S.%f')
     df['Timestamp'] = df['Time'].astype('int64') // 10**9
     grouped = df.groupby(['Source', 'Timestamp']).size()
@@ -214,7 +214,7 @@ def detect_dos_attacks(df):
 def detect_port_scanning(df):
     """Виявлення сканування портів."""
     print("\nDetecting port scanning:")
-    port_scan_threshold = 10  # Мінімальна кількість унікальних портів
+    port_scan_threshold = 10 
     grouped = df.groupby('Source')['Info'].apply(
         lambda x: len(set(port.split(':')[-1] for port in x if ':' in port))
     )
@@ -228,7 +228,7 @@ def detect_port_scanning(df):
 def detect_large_packets(df):
     """Виявлення великих пакетів."""
     print("\nDetecting large packets:")
-    large_packet_threshold = 1000  # Розмір пакета в байтах
+    large_packet_threshold = 1000  
     large_packets = df[df['Length'] > large_packet_threshold]
     if not large_packets.empty:
         print("Large packets detected:")
@@ -323,5 +323,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
