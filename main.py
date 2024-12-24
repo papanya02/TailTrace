@@ -29,7 +29,7 @@ def print_welcome_message():
      █████████████████████████████████████████████████████████████████████                    
       
       |                         TailTrace                               |
-      |                         /\_____\/\                               |
+      |                         /\_____/\                               |
       |                        /  o   o  \  < Meow! Network sniffed!    |
       |                       ( ==  ^  == )                             |
       |                        )         (                              |
@@ -109,7 +109,6 @@ def packet_callback(packet, csv_file=None):
         }
         log_traffic_to_csv(csv_file, packet_info)
 
-
 def log_traffic_to_csv(csv_file, packet_info):
     """Log captured packet data to a CSV file."""
     file_exists = os.path.isfile(csv_file)
@@ -155,31 +154,22 @@ def capture_traffic(csv_file=None):
     except KeyboardInterrupt:
         print("\nCapture stopped by user.")
 
-def analyze_csv(csv_file):
-    """Analyze network traffic from a CSV file."""
-    if not os.path.isfile(csv_file):
-        print(f"Error: File {csv_file} does not exist.")
-        return
-
-    try:
-        df = pd.read_csv(csv_file)
-    except Exception as e:
-        print(f"Error reading CSV file: {e}")
-        return
-
-    print("\nPerforming traffic analysis...")
-
-    protocol_counts = df['Protocol'].value_counts()
+def protocol_distribution(df):
+    """Analyze protocol distribution."""
     print("\nProtocol Distribution:")
-    print(protocol_counts)
+    print(df['Protocol'].value_counts())
 
-    print("\nDetecting anomalies...")
-    if 'Length' in df.columns:
-        large_packets = df[df['Length'] > 1000]
-        if not large_packets.empty:
-            print(f"\nLarge packets detected:")
-            print(large_packets[['Time', 'Source', 'Destination', 'Length']])
+def detect_large_packets(df):
+    """Detect packets larger than 1000 bytes."""
+    print("\nDetecting large packets:")
+    large_packets = df[df['Length'] > 1000]
+    if not large_packets.empty:
+        print(large_packets[['Time', 'Source', 'Destination', 'Length']])
+    else:
+        print("No large packets detected.")
 
+def analyze_geolocation(df):
+    """Perform geolocation analysis."""
     try:
         reader = geoip2.database.Reader('GeoLite2-Country.mmdb')
         countries = []
@@ -194,8 +184,115 @@ def analyze_csv(csv_file):
         print(df['Source Country'].value_counts())
     except Exception as e:
         print(f"Error in geolocation analysis: {e}")
-        3
 
+def analyze_signatures(df):
+    """Perform basic signature-based analysis to detect suspicious traffic."""
+    print("\nAnalyzing signatures for suspicious traffic:")
+    suspicious_ports = [4444, 5555, 6666]  # Example of suspicious ports
+    suspicious_traffic = df[df['Info'].str.contains('|'.join(map(str, suspicious_ports)), na=False)]
+    if not suspicious_traffic.empty:
+        print("Suspicious traffic detected:")
+        print(suspicious_traffic[['Time', 'Source', 'Destination', 'Info']])
+    else:
+        print("No suspicious traffic detected.")
+        
+def detect_dos_attacks(df):
+    """Виявлення DoS/DDoS-атак за кількістю запитів з одного джерела."""
+    print("\nDetecting DoS/DDoS attacks:")
+    dos_threshold = 1000  # Кількість запитів
+    time_window = 10  # У секундах
+    df['Time'] = pd.to_datetime(df['Time'], format='%H:%M:%S.%f')
+    df['Timestamp'] = df['Time'].astype('int64') // 10**9
+    grouped = df.groupby(['Source', 'Timestamp']).size()
+    potential_dos = grouped[grouped > dos_threshold]
+    if not potential_dos.empty:
+        print("Potential DoS/DDoS attacks detected:")
+        print(potential_dos)
+    else:
+        print("No DoS/DDoS activity detected.")
+
+def detect_port_scanning(df):
+    """Виявлення сканування портів."""
+    print("\nDetecting port scanning:")
+    port_scan_threshold = 10  # Мінімальна кількість унікальних портів
+    grouped = df.groupby('Source')['Info'].apply(
+        lambda x: len(set(port.split(':')[-1] for port in x if ':' in port))
+    )
+    potential_scans = grouped[grouped > port_scan_threshold]
+    if not potential_scans.empty:
+        print("Potential port scanning detected:")
+        print(potential_scans)
+    else:
+        print("No port scanning activity detected.")
+
+def detect_large_packets(df):
+    """Виявлення великих пакетів."""
+    print("\nDetecting large packets:")
+    large_packet_threshold = 1000  # Розмір пакета в байтах
+    large_packets = df[df['Length'] > large_packet_threshold]
+    if not large_packets.empty:
+        print("Large packets detected:")
+        print(large_packets[['Time', 'Source', 'Destination', 'Length']])
+    else:
+        print("No large packets detected.")
+
+def detect_unusual_protocols(df):
+    """Виявлення незвичних протоколів."""
+    print("\nDetecting unusual protocols:")
+    known_protocols = {'TCP', 'UDP', 'QUIC (HTTP/3)', 'MQTT', 'CoAP', '5G'}
+    unusual_protocols = df[~df['Protocol'].isin(known_protocols)]
+    if not unusual_protocols.empty:
+        print("Unusual protocols detected:")
+        print(unusual_protocols[['Time', 'Source', 'Destination', 'Protocol']])
+    else:
+        print("No unusual protocols detected.")
+ 
+
+def analyze_csv(csv_file):
+    """Analyze network traffic from a CSV file."""
+    if not os.path.isfile(csv_file):
+        print(f"Error: File {csv_file} does not exist.")
+        return
+
+    try:
+        df = pd.read_csv(csv_file)
+    except Exception as e:
+        print(f"Error reading CSV file: {e}")
+        return
+
+    while True:
+        print("\nSelect analysis option:")
+        print("1) Protocol Distribution")
+        print("2) Detect Large Packets")
+        print("3) Geolocation Analysis")
+        print("4) Signature-Based Analysis")
+        print("5) Detect DoS/DDoS attacks")  
+        print("6) Detect port scanning")
+        print("7) Detect unusual protocols")
+        print("8) Return to previous menu")
+
+
+        choice = input("Enter your choice: ")
+
+        if choice == "1":
+            protocol_distribution(df)
+        elif choice == "2":
+            detect_large_packets(df)
+        elif choice == "3":
+            analyze_geolocation(df)
+        elif choice == "4":
+            analyze_signatures(df)
+        elif choice == "5":
+            detect_dos_attacks(df)
+        elif choice == "6":
+            detect_port_scanning(df)
+        elif choice == "7":
+            detect_unusual_protocols(df)
+        elif choice == "8":
+            break
+        else:
+            print("Invalid choice. Please try again.")    
+  
 def main():
     print_welcome_message()
 
@@ -226,4 +323,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
