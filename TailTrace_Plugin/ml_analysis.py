@@ -1,28 +1,25 @@
-import sys
 import json
-import joblib
-import numpy as np
+import sys
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
 
-model = joblib.load('model.joblib')
+nsl_kdd_model = joblib.load('nsl_kdd_model.pkl')
+unsw_model = joblib.load('unsw_nb15_model.pkl')
 
-def analyze_packet(packet_data):
+packet_data = json.loads(sys.argv[1])
 
-    feature_vector = np.array([
-        packet_data["length"],  
-        len(packet_data["info"]), 
-    ]).reshape(1, -1)
+scaler = StandardScaler()
+scaled_data = scaler.fit_transform([[
+    packet_data['length'],
+    len(packet_data['info']),
+    len(packet_data['src']),
+    len(packet_data['dst']),
+]])
 
- 
-    prediction = model.predict(feature_vector)
+
+nsl_kdd_prediction = nsl_kdd_model.predict(scaled_data)
+unsw_prediction = unsw_model.predict(scaled_data)
 
 
-    if prediction[0] == 1:
-        return "Malicious packet detected"
-    else:
-        return "Benign packet"
-
-if __name__ == "__main__":
-  
-    packet_data = json.loads(sys.argv[1])
-    result = analyze_packet(packet_data)
-    print(result)
+print(f"NSL-KDD Prediction: {nsl_kdd_prediction[0]}")
+print(f"UNSW-NB15 Prediction: {unsw_prediction[0]}")
