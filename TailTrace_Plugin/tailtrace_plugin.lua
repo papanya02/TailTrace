@@ -1,6 +1,4 @@
-dofile('tailtrace_helpers.lua')
-
-local json = require("dkjson")  
+local json = require("dkjson")
 
 local welcome_message = [[
  █████████████████████████████████████████████████████████████████████                    
@@ -14,17 +12,7 @@ local welcome_message = [[
   |                     (__(__)___(__)__)                           |
   |                                                                 |
   █████████████████████████████████████████████████████████████████████
-
   --=[ TailTrace v1.0.0 ]=--
-
-  TailTrace tip: Never underestimate a cat's curiosity or a network packet.
-
-**************************************************************
-* TailTrace v2.0.0                                           *
-* License: MIT                                               *
-* Author: Andrii Tyshkevych                                  *
-* Description: A network traffic analyzer WireSHark plugin.  *
-**************************************************************
 ]]
 
 print(welcome_message)
@@ -36,7 +24,6 @@ tailtrace_proto.fields.destination = ProtoField.string("tailtrace.destination", 
 tailtrace_proto.fields.protocol = ProtoField.string("tailtrace.protocol", "Protocol")
 tailtrace_proto.fields.length = ProtoField.uint32("tailtrace.length", "Packet Length")
 tailtrace_proto.fields.info = ProtoField.string("tailtrace.info", "Info")
-
 tailtrace_proto.fields.ml_result = ProtoField.string("tailtrace.ml_result", "ML Analysis")
 tailtrace_proto.fields.ids_alert = ProtoField.string("tailtrace.ids_alert", "IDS Alert")
 
@@ -46,7 +33,6 @@ local function signature_analysis(info)
         { pattern = "scan", alert = "Port scan detected" },
         { pattern = "ddos", alert = "DDoS activity detected" }
     }
-
     for _, sig in ipairs(signatures) do
         if string.match(info, sig.pattern) then
             return sig.alert
@@ -55,22 +41,32 @@ local function signature_analysis(info)
     return "No signature match"
 end
 
-
 function call_python_ml(packet_data)
-    local cmd = "python3 ml_analysis.py '" .. json.encode(packet_data) .. "'"
+    local temp_file = "packet_data.json"
+    local file = io.open(temp_file, "w")
+    file:write(json.encode(packet_data))
+    file:close()
+
+    local cmd = "python3 ml_analysis.py " .. temp_file
     local result = io.popen(cmd):read("*all")
+    os.remove(temp_file)
     return result
 end
 
 function call_python_ids(packet_data)
-    local cmd = "python3 ids_analysis.py '" .. json.encode(packet_data) .. "'"
+    local temp_file = "packet_data.json"
+    local file = io.open(temp_file, "w")
+    file:write(json.encode(packet_data))
+    file:close()
+
+    local cmd = "python3 ids_analysis.py " .. temp_file
     local result = io.popen(cmd):read("*all")
+    os.remove(temp_file)
     return result
 end
 
 tailtrace_proto.dissector = function(buffer, pinfo, tree)
     local subtree = tree:add(tailtrace_proto, buffer(), "TailTrace Analysis")
-
     local src = tostring(pinfo.src)
     local dst = tostring(pinfo.dst)
     local proto = tostring(pinfo.protocol)
@@ -92,8 +88,7 @@ tailtrace_proto.dissector = function(buffer, pinfo, tree)
     local ids_result = call_python_ids({ src = src, dst = dst, proto = proto, length = length, info = info })
     subtree:add(tailtrace_proto.fields.ids_alert, ids_result)
 
-    pinfo.cols.info:append(" [TailTrace Analysis]")
+    pinfo.cols.info:set(pinfo.cols.info .. " [TailTrace Analysis]")
 end
 
-dissector_table = DissectorTable.get("tcp.port")
-dissector_table:add(0, tailtrace_proto)  
+DissectorTable.get("tcp.port"):add(12345, tailtrace_proto)
